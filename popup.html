@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Canvas To-Do</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div>
+        <h1>Canvas To-Do</h1>
+        <p class="subtitle" id="school-label">oklahomachristian.instructure.com</p>
+      </div>
+      <button id="refresh-btn" class="btn btn-primary" type="button">Refresh</button>
+    </header>
+
+    <div id="progress-card" class="progress-card" hidden>
+      <div class="progress-copy">
+        <span class="progress-stat">
+          <span id="progress-done" class="progress-done">0</span>
+          <span class="progress-label">done</span>
+        </span>
+        <span class="progress-stat">
+          <span id="progress-review" class="progress-review">0</span>
+          <span class="progress-label">review</span>
+        </span>
+        <span class="progress-stat">
+          <span id="progress-active" class="progress-active">0</span>
+          <span class="progress-label">in progress</span>
+        </span>
+        <span id="progress-left" class="progress-left">0 left</span>
+      </div>
+      <div class="progress-bar" aria-hidden="true">
+        <div id="progress-fill-done" class="progress-fill progress-fill-done"></div>
+        <div id="progress-fill-review" class="progress-fill progress-fill-review"></div>
+        <div id="progress-fill-active" class="progress-fill progress-fill-active"></div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <label class="filter-field">
+        <span class="sr-only">Filter by class</span>
+        <select id="course-filter">
+          <option value="all">All classes</option>
+        </select>
+      </label>
+      <label class="toggle">
+        <input id="hide-completed" type="checkbox" />
+        <span>Hide done</span>
+      </label>
+    </div>
+
+    <details class="origin-details">
+      <summary>Change school URL</summary>
+      <form id="origin-form" class="origin-row" autocomplete="off">
+        <label class="sr-only" for="origin-input">Canvas URL</label>
+        <input
+          id="origin-input"
+          type="url"
+          spellcheck="false"
+          value="https://oklahomachristian.instructure.com"
+        />
+        <button id="save-origin-btn" class="btn" type="submit">Save</button>
+      </form>
+    </details>
+
+    <div id="status" class="status" hidden></div>
+    <ul id="task-list" class="task-list"></ul>
+    <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
