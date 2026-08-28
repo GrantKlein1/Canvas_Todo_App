@@ -1,0 +1,5 @@
+{
+  "name": "Canvas To-Do (Chrome extension)",
+  "install": "node --check background.js && node --check popup.js && node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest.json is valid')\"",
+  "chromeExecutablePath": "/usr/bin/google-chrome-stable"
+}
