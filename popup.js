@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   hideCompleted: "hideCompleted",
   canvasOrigin: "canvasOrigin",
   courseFilter: "courseFilter",
+  customTasks: "customTasks",
 };
 
 const ASSIGNMENT_TYPES = new Set(["assignment", "quiz", "discussion_topic"]);
@@ -29,11 +30,21 @@ const els = {
   progressFillDone: document.getElementById("progress-fill-done"),
   progressFillReview: document.getElementById("progress-fill-review"),
   progressFillActive: document.getElementById("progress-fill-active"),
+  customForm: document.getElementById("custom-form"),
+  customTitle: document.getElementById("custom-title"),
+  customUrl: document.getElementById("custom-url"),
+  customCourse: document.getElementById("custom-course"),
+  customDue: document.getElementById("custom-due"),
+  customError: document.getElementById("custom-error"),
+  customDetails: document.querySelector(".custom-details"),
 };
 
 const state = {
   origin: DEFAULT_ORIGIN,
   tasks: [],
+  canvasTasks: [],
+  customTasks: [],
+  courses: [],
   completedIds: new Set(),
   inProgressIds: new Set(),
   reviewIds: new Set(),
@@ -73,6 +84,11 @@ els.courseFilter.addEventListener("change", async () => {
   renderTasks();
 });
 
+els.customForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await addCustomAssignment();
+});
+
 async function init() {
   const stored = await chrome.storage.local.get([
     STORAGE_KEYS.completedIds,
@@ -81,6 +97,7 @@ async function init() {
     STORAGE_KEYS.hideCompleted,
     STORAGE_KEYS.canvasOrigin,
     STORAGE_KEYS.courseFilter,
+    STORAGE_KEYS.customTasks,
   ]);
 
   state.completedIds = new Set(stored[STORAGE_KEYS.completedIds] || []);
@@ -94,12 +111,14 @@ async function init() {
   );
   state.hideCompleted = Boolean(stored[STORAGE_KEYS.hideCompleted]);
   state.courseFilter = stored[STORAGE_KEYS.courseFilter] || "all";
+  state.customTasks = CustomTasks.hydrateCustomTasks(stored[STORAGE_KEYS.customTasks]);
   els.hideCompleted.checked = state.hideCompleted;
 
   const origin = stored[STORAGE_KEYS.canvasOrigin] || DEFAULT_ORIGIN;
   state.origin = origin;
   els.originInput.value = origin;
   setSchoolLabel(origin);
+  populateCustomCourseSelect();
   await loadTasks(origin);
   startAutoSync();
 }
@@ -133,18 +152,40 @@ async function loadTasks(origin, { silent = false } = {}) {
   }
 
   try {
-    let tasks = await fetchPlannerTasks(origin);
-    if (!tasks.length) {
-      tasks = await fetchTodoTasks(origin);
+    let tasks = [];
+    let loadError = null;
+    try {
+      tasks = await fetchPlannerTasks(origin);
+      if (!tasks.length) {
+        tasks = await fetchTodoTasks(origin);
+      }
+    } catch (error) {
+      loadError = error;
     }
+
+    const courses = await fetchCourses(origin);
     if (generation !== loadGeneration) return;
 
+    if (loadError) {
+      if (silent && state.tasks.length) return;
+      state.canvasTasks = [];
+      if (courses.length) state.courses = courses;
+      rebuildTaskList();
+      populateCourseFilter();
+      populateCustomCourseSelect();
+      renderTasks();
+      showStatus(loadError.message || "Could not load Canvas assignments.", "error");
+      return;
+    }
+
     state.origin = origin;
-    state.tasks = sortTasks(tasks);
+    state.courses = courses;
+    state.canvasTasks = tasks;
+    rebuildTaskList();
     setSchoolLabel(origin);
     await chrome.storage.local.set({ [STORAGE_KEYS.canvasOrigin]: origin });
 
-    const synced = syncSubmittedCompletions(state.tasks);
+    const synced = syncSubmittedCompletions(state.canvasTasks);
     if (synced > 0) {
       await persistTaskStatus();
       bumpProgress("done");
@@ -152,13 +193,16 @@ async function loadTasks(origin, { silent = false } = {}) {
 
     if (!silent) hideStatus();
     populateCourseFilter();
+    populateCustomCourseSelect();
     renderTasks();
   } catch (error) {
     if (generation !== loadGeneration) return;
     if (silent && state.tasks.length) return;
 
-    state.tasks = [];
+    state.canvasTasks = [];
+    rebuildTaskList();
     populateCourseFilter();
+    populateCustomCourseSelect();
     renderTasks();
     showStatus(error.message || "Could not load Canvas assignments.", "error");
   } finally {
@@ -192,6 +236,21 @@ async function fetchTodoTasks(origin) {
   return items
     .map((item) => mapTodoItem(item, origin, assignmentIndex))
     .filter((task) => task && task.title);
+}
+
+async function fetchCourses(origin) {
+  try {
+    const params = new URLSearchParams({ per_page: "100", enrollment_state: "active" });
+    const items = await fetchAllPages(`${origin}/api/v1/courses?${params}`);
+    return items
+      .filter((course) => course && course.id && (course.name || course.course_code))
+      .map((course) => ({
+        id: String(course.id),
+        name: String(course.name || course.course_code),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 async function fetchAssignmentIndex(origin, items) {
@@ -407,12 +466,11 @@ function parseNextLink(header) {
 }
 
 function sortTasks(tasks) {
-  return [...tasks].sort((a, b) => {
-    const aTime = a.dueAt ? Date.parse(a.dueAt) : Number.POSITIVE_INFINITY;
-    const bTime = b.dueAt ? Date.parse(b.dueAt) : Number.POSITIVE_INFINITY;
-    if (aTime !== bTime) return aTime - bTime;
-    return a.title.localeCompare(b.title);
-  });
+  return CustomTasks.sortTasks(tasks);
+}
+
+function rebuildTaskList() {
+  state.tasks = CustomTasks.mergeTasks(state.canvasTasks, state.customTasks);
 }
 
 function tasksForCourse() {
@@ -421,11 +479,7 @@ function tasksForCourse() {
 }
 
 function populateCourseFilter() {
-  const courses = new Map();
-  for (const task of state.tasks) {
-    const id = task.courseId || task.course;
-    if (!courses.has(id)) courses.set(id, task.course);
-  }
+  const courses = CustomTasks.collectCourses(state.courses, state.tasks);
 
   const selected = state.courseFilter;
   els.courseFilter.replaceChildren();
@@ -445,6 +499,29 @@ function populateCourseFilter() {
 
   els.courseFilter.value = [...courses.keys(), "all"].includes(selected) ? selected : "all";
   state.courseFilter = els.courseFilter.value;
+}
+
+function populateCustomCourseSelect() {
+  const courses = CustomTasks.collectCourses(state.courses, state.tasks);
+  const selected = els.customCourse.value;
+  els.customCourse.replaceChildren();
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a class";
+  els.customCourse.append(placeholder);
+
+  const names = [...courses.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  for (const [id, name] of names) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = name;
+    els.customCourse.append(option);
+  }
+
+  if ([...courses.keys()].includes(selected)) {
+    els.customCourse.value = selected;
+  }
 }
 
 function taskStatus(task) {
@@ -479,7 +556,9 @@ function renderTasks() {
     empty.className = "empty";
     empty.textContent = scoped.length
       ? "All caught up in this class."
-      : "No graded gradebook assignments found.";
+      : state.tasks.length
+        ? "No assignments in this class."
+        : "No graded assignments found. Add a custom assignment above.";
     els.taskList.append(empty);
     return;
   }
@@ -525,6 +604,7 @@ function renderTask(task, now) {
   const review = status === "review";
   const submitted = Boolean(task.submitted);
   li.className = active ? "task in-progress" : review ? "task review" : done ? "task done" : "task";
+  if (CustomTasks.isCustomTask(task)) li.classList.add("custom-task");
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -588,8 +668,8 @@ function renderTask(task, now) {
   course.title = task.course;
 
   const points = document.createElement("span");
-  points.className = "points-tag";
-  points.textContent = formatPoints(task.pointsPossible);
+  points.className = CustomTasks.isCustomTask(task) ? "custom-tag" : "points-tag";
+  points.textContent = formatPoints(task.pointsPossible, CustomTasks.isCustomTask(task));
 
   const due = document.createElement("span");
   due.className = "due";
@@ -618,10 +698,23 @@ function renderTask(task, now) {
   meta.append(due);
   body.append(title, meta);
   li.append(statusGroup, body);
+
+  if (CustomTasks.isCustomTask(task)) {
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "custom-remove";
+    removeBtn.setAttribute("aria-label", `Remove ${task.title}`);
+    removeBtn.title = "Remove custom assignment";
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", () => deleteCustomAssignment(task.id));
+    li.append(removeBtn);
+  }
+
   return li;
 }
 
-function formatPoints(points) {
+function formatPoints(points, custom = false) {
+  if (custom) return "Custom";
   if (points == null) return "Graded";
   const value = Number.isInteger(points) ? String(points) : String(Number(points.toFixed(2)));
   return `${value} pt${points === 1 ? "" : "s"}`;
@@ -649,6 +742,73 @@ async function persistTaskStatus() {
     [STORAGE_KEYS.inProgressIds]: [...state.inProgressIds],
     [STORAGE_KEYS.reviewIds]: [...state.reviewIds],
   });
+}
+
+async function persistCustomTasks() {
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.customTasks]: state.customTasks,
+  });
+}
+
+function showCustomError(message) {
+  els.customError.hidden = false;
+  els.customError.textContent = message;
+}
+
+function hideCustomError() {
+  els.customError.hidden = true;
+  els.customError.textContent = "";
+}
+
+async function addCustomAssignment() {
+  hideCustomError();
+  const validated = CustomTasks.validateCustomAssignment({
+    title: els.customTitle.value,
+    url: els.customUrl.value,
+    courseId: els.customCourse.value,
+    dueAt: els.customDue.value,
+  });
+  if (!validated.ok) {
+    showCustomError(validated.errors[0]);
+    return;
+  }
+
+  const courses = CustomTasks.collectCourses(state.courses, state.tasks);
+  const task = CustomTasks.createCustomTask({
+    title: validated.value.title,
+    url: validated.value.url,
+    courseId: validated.value.courseId,
+    course: courses.get(validated.value.courseId) || CustomTasks.OTHER_COURSE_NAME,
+    dueAt: validated.value.dueAt,
+  });
+
+  state.customTasks = [...state.customTasks, task];
+  await persistCustomTasks();
+  rebuildTaskList();
+
+  if (state.courseFilter !== "all" && state.courseFilter !== task.courseId) {
+    state.courseFilter = "all";
+    await chrome.storage.local.set({ [STORAGE_KEYS.courseFilter]: "all" });
+  }
+
+  els.customForm.reset();
+  populateCourseFilter();
+  populateCustomCourseSelect();
+  if (els.customDetails) els.customDetails.open = false;
+  renderTasks();
+}
+
+async function deleteCustomAssignment(taskId) {
+  state.customTasks = CustomTasks.removeCustomTask(state.customTasks, taskId);
+  state.completedIds.delete(taskId);
+  state.inProgressIds.delete(taskId);
+  state.reviewIds.delete(taskId);
+  await persistCustomTasks();
+  await persistTaskStatus();
+  rebuildTaskList();
+  populateCourseFilter();
+  populateCustomCourseSelect();
+  renderTasks();
 }
 
 function bumpProgress(kind) {

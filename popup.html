@@ -51,6 +51,36 @@
       </label>
     </div>
 
+    <details class="custom-details">
+      <summary>Add custom assignment</summary>
+      <form id="custom-form" class="custom-form" autocomplete="off">
+        <label class="custom-field">
+          <span>Title</span>
+          <input id="custom-title" type="text" maxlength="200" placeholder="e.g. Study group notes" required />
+        </label>
+        <label class="custom-field">
+          <span>Link</span>
+          <input id="custom-url" type="text" inputmode="url" spellcheck="false" placeholder="https://…" required />
+        </label>
+        <div class="custom-row">
+          <label class="custom-field">
+            <span>Class</span>
+            <select id="custom-course" required>
+              <option value="">Select a class</option>
+            </select>
+          </label>
+          <label class="custom-field">
+            <span>Due date</span>
+            <input id="custom-due" type="datetime-local" />
+          </label>
+        </div>
+        <div class="custom-actions">
+          <p id="custom-error" class="custom-error" hidden></p>
+          <button id="custom-submit" class="btn btn-primary" type="submit">Add to list</button>
+        </div>
+      </form>
+    </details>
+
     <details class="origin-details">
       <summary>Change school URL</summary>
       <form id="origin-form" class="origin-row" autocomplete="off">
@@ -69,6 +99,7 @@
     <ul id="task-list" class="task-list"></ul>
     <canvas id="confetti-canvas" aria-hidden="true"></canvas>
 
+    <script src="custom-tasks.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
