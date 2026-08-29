@@ -204,14 +204,113 @@ select:focus {
   border-color: var(--accent);
 }
 
+.custom-details,
 .origin-details {
   margin-bottom: 10px;
   color: var(--muted);
 }
 
+.custom-details summary,
 .origin-details summary {
   cursor: pointer;
   font-size: 11px;
+}
+
+.custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.custom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.custom-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.custom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-error {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+input[type="text"],
+input[type="datetime-local"] {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+input[type="text"]:focus,
+input[type="datetime-local"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.custom-remove {
+  appearance: none;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.custom-remove:hover,
+.custom-remove:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.custom-tag {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-row));
+  color: var(--accent);
+}
+
+.custom-field input[type="url"],
+.custom-field select {
+  width: 100%;
 }
 
 .origin-row {
@@ -322,6 +421,10 @@ input[type="url"]:focus {
   background: var(--bg-row);
   box-shadow: var(--shadow);
   animation: task-in 0.18s ease;
+}
+
+.task.custom-task {
+  grid-template-columns: auto 1fr auto;
 }
 
 .task-status {
@@ -461,7 +564,8 @@ input[type="url"]:focus {
 .points-tag,
 .status-tag,
 .review-tag,
-.submitted-tag {
+.submitted-tag,
+.custom-tag {
   display: inline-block;
   max-width: 180px;
   overflow: hidden;

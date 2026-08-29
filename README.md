@@ -91,7 +91,8 @@ From there you can:
 - **Mark it as needs review** — click the square next to the circle.
 - **Filter by class** — use the **All classes** dropdown.
 - **Hide finished work** — turn on **Hide done**.
-- **Refresh the list** — click **Refresh**, or just click back into the panel. It also updates on its own after you submit something in Canvas.
+- **Add a custom assignment** — expand **Add custom assignment**, then enter a title, link, class, and due date. Custom items stay on this computer and can be removed with the × on the row.
+- **Refresh the list** — click **Refresh**, or just click back into the panel. It also updates on its own after you submit something in Canvas. Custom assignments stay in the list when you refresh.
 
 If your school’s Canvas address is not the one shown at the top of the panel, click **Change school URL**, paste your Canvas link, and click **Save**.
 
@@ -105,6 +106,7 @@ If your school’s Canvas address is not the one shown at the top of the panel, 
 - **It only shows graded work.** Practice quizzes, surveys, and ungraded items are left out on purpose so the list stays focused on what counts in the gradebook.
 - **Submitted work checks itself off.** After you turn something in on Canvas, it should move to done. You cannot uncheck those. Assignments you check off yourself (without submitting) stay checked on this computer.
 - **Your checkmarks live in this browser.** Done / in progress / needs review are saved on this computer in this browser. They do not sync to your phone or to another computer.
+- **Custom assignments are local.** Anything you add yourself (title, link, class, due date) is stored in this browser only. It is not created in Canvas.
 - **Do not delete the project folder.** The extension reads files from the folder you loaded. If you move or delete that folder, go back to the extensions page, click **Load unpacked**, and select the folder again.
 - **Leave Developer mode on.** You need it for this kind of extension. The browser warning is normal.
 - **This is a computer extension, not a phone app.** It works in Chrome and Edge on a laptop or desktop, not in the Canvas mobile app.
