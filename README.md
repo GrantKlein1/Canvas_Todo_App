@@ -1,6 +1,6 @@
 # Canvas To-Do
 
-A simple to-do list for your Canvas assignments. It lives in your browser and pulls in the graded work from your school’s Canvas site so you can check things off, mark what you’re working on, and jump straight to each assignment.
+A simple to-do list for your Canvas assignments. It lives in your browser and pulls graded work from your school’s Canvas gradebook so you can check things off, mark what you’re working on, and jump straight to each assignment.
 
 You do **not** need to know how to code. Follow the steps below from start to finish.
 
@@ -103,7 +103,7 @@ If your school’s Canvas address is not the one shown at the top of the panel, 
 - **Stay logged in to Canvas.** This tool uses the Canvas session already open in your browser. It does not ask for your password and cannot load assignments if you are logged out.
 - **Use the same browser.** If you log into Canvas in Chrome, open Canvas To-Do in Chrome. Logging in on your phone, in Safari, or in a different browser does not count.
 - **Open Canvas first if the list is empty.** If you see “Not logged in,” open Canvas, sign in, then click **Refresh**.
-- **It only shows graded work.** Practice quizzes, surveys, and ungraded items are left out on purpose so the list stays focused on what counts in the gradebook.
+- **It reads the gradebook, not just Modules.** Graded work that shows up in Grades is included even if the professor has not published the module yet. Practice quizzes, surveys, and ungraded items are left out on purpose.
 - **Submitted work checks itself off.** After you turn something in on Canvas, it should move to done. You cannot uncheck those. Assignments you check off yourself (without submitting) stay checked on this computer.
 - **Your checkmarks live in this browser.** Done / in progress / needs review are saved on this computer in this browser. They do not sync to your phone or to another computer.
 - **Custom assignments are local.** Anything you add yourself (title, link, class, due date) is stored in this browser only. It is not created in Canvas.

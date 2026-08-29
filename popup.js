@@ -10,8 +10,6 @@ const STORAGE_KEYS = {
   customTasks: "customTasks",
 };
 
-const ASSIGNMENT_TYPES = new Set(["assignment", "quiz", "discussion_topic"]);
-
 const els = {
   refreshBtn: document.getElementById("refresh-btn"),
   originForm: document.getElementById("origin-form"),
@@ -154,16 +152,13 @@ async function loadTasks(origin, { silent = false } = {}) {
   try {
     let tasks = [];
     let loadError = null;
+    let courses = [];
     try {
-      tasks = await fetchPlannerTasks(origin);
-      if (!tasks.length) {
-        tasks = await fetchTodoTasks(origin);
-      }
+      courses = await fetchCourses(origin);
+      tasks = await fetchGradebookTasks(origin, courses);
     } catch (error) {
       loadError = error;
     }
-
-    const courses = await fetchCourses(origin);
     if (generation !== loadGeneration) return;
 
     if (loadError) {
@@ -210,186 +205,49 @@ async function loadTasks(origin, { silent = false } = {}) {
   }
 }
 
-async function fetchPlannerTasks(origin) {
-  const start = new Date();
-  start.setDate(start.getDate() - 14);
-  const end = new Date();
-  end.setMonth(end.getMonth() + 6);
-
-  const params = new URLSearchParams({
-    start_date: start.toISOString(),
-    end_date: end.toISOString(),
-    per_page: "100",
-  });
-
-  const items = await fetchAllPages(`${origin}/api/v1/planner/items?${params}`);
-  const assignmentIndex = await fetchAssignmentIndex(origin, items);
-  return items
-    .filter((item) => ASSIGNMENT_TYPES.has(String(item.plannable_type || "").toLowerCase()))
-    .map((item) => mapPlannerItem(item, origin, assignmentIndex))
-    .filter((task) => task && task.title);
-}
-
-async function fetchTodoTasks(origin) {
-  const items = await fetchAllPages(`${origin}/api/v1/users/self/todo?per_page=100`);
-  const assignmentIndex = await fetchAssignmentIndex(origin, items);
-  return items
-    .map((item) => mapTodoItem(item, origin, assignmentIndex))
-    .filter((task) => task && task.title);
-}
-
 async function fetchCourses(origin) {
-  try {
-    const params = new URLSearchParams({ per_page: "100", enrollment_state: "active" });
-    const items = await fetchAllPages(`${origin}/api/v1/courses?${params}`);
-    return items
-      .filter((course) => course && course.id && (course.name || course.course_code))
-      .map((course) => ({
-        id: String(course.id),
-        name: String(course.name || course.course_code),
-      }));
-  } catch {
-    return [];
-  }
+  const params = new URLSearchParams({ per_page: "100", enrollment_state: "active" });
+  const items = await fetchAllPages(`${origin}/api/v1/courses?${params}`);
+  return items
+    .filter((course) => course && course.id && (course.name || course.course_code))
+    .map((course) => ({
+      id: String(course.id),
+      name: String(course.name || course.course_code),
+    }));
 }
 
-async function fetchAssignmentIndex(origin, items) {
-  const courseIds = [
-    ...new Set(
-      items
-        .map((item) => item.course_id || item.assignment?.course_id || item.plannable?.course_id)
-        .filter(Boolean)
-        .map(String)
-    ),
-  ];
-
-  const index = new Map();
-  await Promise.all(
-    courseIds.map(async (courseId) => {
+async function fetchGradebookTasks(origin, courses) {
+  const results = await Promise.all(
+    (courses || []).map(async (course) => {
       try {
-        const assignmentParams = new URLSearchParams({ per_page: "100" });
-        assignmentParams.append("include[]", "submission");
-
-        const submissionParams = new URLSearchParams({ per_page: "100" });
-        submissionParams.append("student_ids[]", "self");
-
-        const [assignments, submissions] = await Promise.all([
-          fetchAllPages(`${origin}/api/v1/courses/${courseId}/assignments?${assignmentParams}`),
-          fetchAllPages(
-            `${origin}/api/v1/courses/${courseId}/students/submissions?${submissionParams}`
-          ).catch(() => []),
-        ]);
-
-        const submissionsByAssignment = new Map();
-        for (const submission of submissions) {
-          if (submission?.assignment_id != null) {
-            submissionsByAssignment.set(String(submission.assignment_id), submission);
-          }
-        }
-
-        for (const assignment of assignments) {
-          const id = String(assignment.id);
-          if (submissionsByAssignment.has(id)) {
-            assignment.submission = submissionsByAssignment.get(id);
-          }
-          index.set(id, assignment);
-        }
+        const assignments = await fetchCourseGradebookAssignments(origin, course.id);
+        return GradebookTasks.collectGradebookTasks(assignments, course, origin);
       } catch {
-        // Keep planner data if a course assignment fetch fails.
+        return [];
       }
     })
   );
-  return index;
+  return results.flat().filter((task) => task && task.title);
 }
 
-function mapPlannerItem(item, origin, assignmentIndex) {
-  const plannable = item.plannable || {};
-  const assignment = resolveAssignment(item, assignmentIndex);
-  if (!isGradebookAssignment(assignment, plannable)) return null;
-
-  return {
-    id: `${item.plannable_type || "item"}-${item.plannable_id || plannable.id || assignment.id}`,
-    title: assignment?.name || plannable.title || plannable.name || "Untitled",
-    course: item.context_name || assignment?.course_name || "Canvas",
-    courseId: String(item.course_id || assignment?.course_id || ""),
-    dueAt: item.plannable_date || assignment?.due_at || plannable.due_at || plannable.todo_date || null,
-    url: toAbsoluteUrl(item.html_url || assignment?.html_url || plannable.html_url, origin),
-    pointsPossible: firstNumber(assignment?.points_possible, plannable.points_possible, plannable.assignment?.points_possible),
-    submitted: isSubmittedToGradebook(assignment?.submission, item.submissions, plannable.submission),
-  };
-}
-
-function mapTodoItem(item, origin, assignmentIndex) {
-  const raw = item.assignment || {};
-  const assignment = assignmentIndex.get(String(raw.id)) || raw;
-  if (!isGradebookAssignment(assignment, raw)) return null;
-
-  return {
-    id: `todo-${assignment.id || raw.id}`,
-    title: assignment.name || raw.name || item.title || "Untitled",
-    course: item.context_name || "Canvas",
-    courseId: String(item.course_id || assignment.course_id || ""),
-    dueAt: assignment.due_at || raw.due_at || item.due_at || null,
-    url: toAbsoluteUrl(item.html_url || assignment.html_url || raw.html_url, origin),
-    pointsPossible: firstNumber(assignment.points_possible, raw.points_possible),
-    submitted: isSubmittedToGradebook(assignment.submission, raw.submission, item.submission, item.submissions),
-  };
-}
-
-function resolveAssignment(item, assignmentIndex) {
-  const plannable = item.plannable || {};
-  const nested = plannable.assignment || item.assignment || {};
-  const type = String(item.plannable_type || "").toLowerCase();
-  const ids = [
-    nested.id,
-    plannable.assignment_id,
-    type === "assignment" ? item.plannable_id : null,
-    type === "assignment" ? plannable.id : null,
-  ]
-    .filter(Boolean)
-    .map(String);
-
-  for (const id of ids) {
-    if (assignmentIndex.has(id)) return assignmentIndex.get(id);
-  }
-  return Object.keys(nested).length ? nested : plannable;
-}
-
-function isGradebookAssignment(assignment, fallback = {}) {
-  const source = assignment && typeof assignment === "object" ? assignment : fallback;
-  if (source.published === false) return false;
-
-  const gradingType = String(source.grading_type || fallback.grading_type || "").toLowerCase();
-  if (gradingType === "not_graded") return false;
-
-  const quizType = String(source.quiz_type || fallback.quiz_type || "").toLowerCase();
-  if (quizType === "practice_quiz" || quizType === "survey") {
-    return false;
+async function fetchCourseGradebookAssignments(origin, courseId) {
+  const groups = await fetchAllPages(GradebookTasks.assignmentGroupsUrl(origin, courseId)).catch(
+    () => []
+  );
+  const fromGroups = GradebookTasks.pickGradebookAssignments(groups, []);
+  if (fromGroups.length) {
+    return attachCourseSubmissions(origin, courseId, fromGroups);
   }
 
-  const points = firstNumber(source.points_possible, fallback.points_possible, fallback.assignment?.points_possible);
-  if (["points", "percent", "letter_grade", "gpa_scale", "pass_fail"].includes(gradingType)) {
-    return true;
-  }
-  return points != null;
+  const assignments = await fetchAllPages(GradebookTasks.courseAssignmentsUrl(origin, courseId));
+  return attachCourseSubmissions(origin, courseId, assignments);
 }
 
-function asRecord(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-
-function isSubmittedToGradebook(...sources) {
-  for (const source of sources) {
-    const record = asRecord(source);
-    if (!record) continue;
-    if (record.excused || record.submitted || record.graded) return true;
-    const workflow = String(record.workflow_state || "").toLowerCase();
-    if (["submitted", "graded", "pending_review"].includes(workflow)) return true;
-    if (record.submitted_at) return true;
-    if (record.grade != null && record.grade !== "") return true;
-    if (typeof record.score === "number" && Number.isFinite(record.score)) return true;
-  }
-  return false;
+async function attachCourseSubmissions(origin, courseId, assignments) {
+  const submissions = await fetchAllPages(
+    GradebookTasks.courseSubmissionsUrl(origin, courseId)
+  ).catch(() => []);
+  return GradebookTasks.mergeSubmissions(assignments, submissions);
 }
 
 function syncSubmittedCompletions(tasks) {
@@ -404,25 +262,6 @@ function syncSubmittedCompletions(tasks) {
     state.reviewIds.delete(task.id);
   }
   return added;
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) {
-      return Number(value);
-    }
-  }
-  return null;
-}
-
-function toAbsoluteUrl(href, origin) {
-  if (!href) return origin;
-  try {
-    return new URL(href, origin).href;
-  } catch {
-    return origin;
-  }
 }
 
 async function fetchAllPages(startUrl) {
